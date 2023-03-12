@@ -1,0 +1,403 @@
+
+Parameters:
+
+    Environment:
+        Description: An environment name that will be prefixed to resource names
+        Type: String
+        Default: Project Two
+
+    VPC: 
+        Description: Please enter the IP range (CIDR notation) for this VPC
+        Type: String
+        Default: 10.0.0.0/16
+
+    PublicSubnet1:
+        Description: Second Public Subnet CIDR In The First AZ
+        Type: String
+        Default: 10.0.0.0/24
+
+    PublicSubnet2:
+        Description: Second Public Subnet CIDR In The Second AZ
+        Type: String
+        Default: 10.0.1.0/24
+
+    PrivateSubnet1:
+        Description: Second Private Subnet CIDR In The First AZ
+        Type: String
+        Default: 10.0.2.0/24
+
+    PrivateSubnet2:
+        Description: Second Private Subnet CIDR In The Second AZ
+        Type: String
+        Default: 10.0.3.0/24
+
+Resources:
+
+    ProVPC: 
+        Type: AWS::EC2::VPC
+        Properties:
+            CidrBlock: !Ref VPC
+            EnableDnsHostnames: true
+            Tags: 
+                - Key: Name 
+                  Value: !Ref Environment
+
+###################################################################################
+
+    InternetGateway:
+        Type: AWS::EC2::InternetGateway
+        Properties:
+            Tags:
+                - Key: Name
+                  Value: !Ref Environment
+                  
+###################################################################################
+           
+    InternetGatewayAttachment:
+        Type: AWS::EC2::VPCGatewayAttachment
+        Properties:
+            InternetGatewayId: !Ref InternetGateway
+            VpcId: !Ref ProVPC
+                  
+###################################################################################
+
+    PublicSubnetOne: 
+        Type: AWS::EC2::Subnet
+        Properties:
+            VpcId: !Ref ProVPC
+             AvailabilityZone: !Select [ 0, !GetAZs '' ]
+            CidrBlock: !Ref PublicSubnet1
+            MapPublicIpOnLaunch: true
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${Environment} Public Subnet (AZ1)
+                  
+###################################################################################
+
+    PublicSubnetTwo: 
+        Type: AWS::EC2::Subnet
+        Properties:
+            VpcId: !Ref ProVPC
+            AvailabilityZone: !Select [ 1, !GetAZs '' ]
+            CidrBlock: !Ref PublicSubnet2
+            MapPublicIpOnLaunch: true
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${Environment} Public Subnet (AZ2)
+                  
+###################################################################################
+
+    PrivateSubnetOne: 
+        Type: AWS::EC2::Subnet
+        Properties:
+            VpcId: !Ref ProVPC
+            AvailabilityZone: !Select [ 0, !GetAZs '' ]
+            CidrBlock: !Ref PrivateSubnet1
+            MapPublicIpOnLaunch: false
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${Environment} Private Subnet (AZ1)
+                  
+###################################################################################
+
+    PrivateSubnetTwo: 
+        Type: AWS::EC2::Subnet
+        Properties:
+            VpcId: !Ref ProVPC
+            AvailabilityZone: !Select [ 1, !GetAZs '' ]
+            CidrBlock: !Ref PrivateSubnet2
+            MapPublicIpOnLaunch: false
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${Environment} Private Subnet (AZ2)
+                  
+###################################################################################
+
+    NatGateway1EIP:
+        Type: AWS::EC2::EIP
+        DependsOn: InternetGatewayAttachment
+        Properties: 
+            Domain: vpc
+                  
+###################################################################################
+
+    NatGateway2EIP:
+        Type: AWS::EC2::EIP
+        DependsOn: InternetGatewayAttachment
+        Properties:
+            Domain: vpc
+                  
+###################################################################################
+
+    NatGateway1: 
+        Type: AWS::EC2::NatGateway
+        Properties: 
+            AllocationId: !GetAtt NatGateway1EIP.AllocationId
+            SubnetId: !Ref PublicSubnetOne
+                  
+###################################################################################
+
+    NatGateway2: 
+        Type: AWS::EC2::NatGateway
+        Properties:
+            AllocationId: !GetAtt NatGateway2EIP.AllocationId
+            SubnetId: !Ref PublicSubnetTwo
+                  
+###################################################################################
+
+    PublicRouteTable:
+        Type: AWS::EC2::RouteTable
+        Properties: 
+            VpcId: !Ref ProVPC
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${Environment} Public Routes
+                  
+###################################################################################
+
+    DefaultPublicRoute: 
+        Type: AWS::EC2::Route
+        DependsOn: InternetGatewayAttachment
+        Properties: 
+            RouteTableId: !Ref PublicRouteTable
+            DestinationCidrBlock: 0.0.0.0/0
+            GatewayId: !Ref InternetGateway
+                  
+###################################################################################
+
+    PublicSubnet1RouteTableAssociation:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+            RouteTableId: !Ref PublicRouteTable
+            SubnetId: !Ref PublicSubnetOne
+                  
+###################################################################################
+
+    PublicSubnet2RouteTableAssociation:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+            RouteTableId: !Ref PublicRouteTable
+            SubnetId: !Ref PublicSubnetTwo
+    
+                  
+###################################################################################
+
+    PrivateRouteTable1:
+        Type: AWS::EC2::RouteTable
+        Properties: 
+            VpcId: !Ref ProVPC
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${Environment} Private Routes (AZ1)
+                  
+###################################################################################
+
+    DefaultPrivateRoute1:
+        Type: AWS::EC2::Route
+        Properties:
+            RouteTableId: !Ref PrivateRouteTable1
+            DestinationCidrBlock: 0.0.0.0/0
+            NatGatewayId: !Ref NatGateway1
+                  
+###################################################################################
+
+    PrivateSubnet1RouteTableAssociation:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+            RouteTableId: !Ref PrivateRouteTable1
+            SubnetId: !Ref PrivateSubnetOne
+                  
+###################################################################################
+
+    PrivateRouteTable2:
+        Type: AWS::EC2::RouteTable
+        Properties: 
+            VpcId: !Ref ProVPC
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${Environment} Private Routes (AZ2)
+                  
+###################################################################################
+
+    DefaultPrivateRoute2:
+        Type: AWS::EC2::Route
+        Properties:
+            RouteTableId: !Ref PrivateRouteTable2
+            DestinationCidrBlock: 0.0.0.0/0
+            NatGatewayId: !Ref NatGateway2
+                  
+###################################################################################
+
+    PrivateSubnet2RouteTableAssociation:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+            RouteTableId: !Ref PrivateRouteTable2
+            SubnetId: !Ref PrivateSubnetTwo
+
+
+##################################################################################
+
+    AutoScaleSG:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+         GroupDescription: Allow SSH and HTTP
+         VpcId:
+            Ref: ProVPC
+         SecurityGroupIngress:
+         - IpProtocol: tcp
+           FromPort: 22
+           ToPort: 22
+           CidrIp: 0.0.0.0/0
+
+         - IpProtocol: tcp
+           FromPort: 80
+           ToPort: 80
+           CidrIp: 0.0.0.0/0
+
+##################################################################################
+
+    ELBSG:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+         GroupDescription: Allow HTTP
+         VpcId:
+            Ref: ProVPC
+         SecurityGroupIngress:
+
+         - IpProtocol: tcp
+           FromPort: 80
+           ToPort: 80
+           CidrIp: 0.0.0.0/0
+        
+         SecurityGroupEgress:
+         
+         - IpProtocol: tcp
+           FromPort: 80
+           ToPort: 80
+           CidrIp: 0.0.0.0/0
+
+##################################################################################
+
+    WebAppLaunchConfig:
+        Type: AWS::AutoScaling::LaunchConfiguration
+        Properties:
+            UserData:
+             Fn::Base64: !Sub |
+                #!/bin/bash
+                sudo apt update
+                sudo apt install awscli -y
+                sudo apt-get update -y
+                sudo apt-get install apache2 -y
+                sudo systemctl start apache2.service 
+
+            ImageId: ami-0574da719dca65348
+            SecurityGroups:
+            - Ref: AutoScaleSG
+            IamInstanceProfile: !Ref RootInstanceProfile
+            InstanceType: t3.medium
+            BlockDeviceMappings:
+            - DeviceName: "/dev/sdk"
+              Ebs:
+                VolumeSize: '10'
+    
+
+##################################################################################
+
+    WebAppGroup:
+        Type: AWS::AutoScaling::AutoScalingGroup
+        Properties:
+            VPCZoneIdentifier:
+                - !Ref PrivateSubnetTwo
+                - !Ref PrivateSubnetOne
+            LaunchConfigurationName:
+                Ref: WebAppLaunchConfig
+            MinSize: '2'
+            MaxSize: '4'
+            TargetGroupARNs:
+            - Ref: WebAppTargetGroup
+      
+ ##################################################################################
+     
+    WebAppLB:
+        Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+        DependsOn:
+        - InternetGateway
+        Properties:
+            Subnets:
+            - !Ref PublicSubnetOne
+            - !Ref PublicSubnetTwo
+            SecurityGroups:
+            - Ref: ELBSG
+
+##################################################################################
+
+    Listener:
+        Type: AWS::ElasticLoadBalancingV2::Listener
+        Properties:
+            DefaultActions:
+                - Type: forward
+                  TargetGroupArn:
+                    Ref: WebAppTargetGroup
+            LoadBalancerArn:
+                Ref: WebAppLB
+            Port: '80'
+            Protocol: HTTP
+
+##################################################################################
+
+    ALBListenerRule:
+        Type: AWS::ElasticLoadBalancingV2::ListenerRule
+        Properties:
+            Actions:
+            - Type: forward
+              TargetGroupArn: !Ref 'WebAppTargetGroup'
+            Conditions:
+            - Field: path-pattern
+              Values: [/]
+            ListenerArn: !Ref 'Listener'
+            Priority: 1
+
+##################################################################################
+
+    WebAppTargetGroup:
+        Type: AWS::ElasticLoadBalancingV2::TargetGroup
+        Properties:
+            HealthCheckIntervalSeconds: 10
+            HealthCheckPath: /
+            HealthCheckProtocol: HTTP
+            HealthCheckTimeoutSeconds: 8
+            HealthyThresholdCount: 2
+            Port: 80
+            Protocol: HTTP
+            UnhealthyThresholdCount: 5
+            VpcId: 
+              Ref: ProjectVPC
+
+###################################################################################
+    BastionHostSG:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+            GroupDescription: Allow SSH
+            VpcId:
+                Ref: ProVPC
+            SecurityGroupIngress:
+            - IpProtocol: tcp
+              FromPort: 22
+              ToPort: 22
+              CidrIp: 0.0.0.0/0
+#################################################################################
+
+    BationHost: 
+     Type: AWS::EC2::Instance
+     DependsOn:
+        - PublicSubnetOne
+     Properties:
+      InstanceType: t2.micro
+      ImageId: ami-0574da719dca65348
+      NetworkInterfaces: 
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          GroupSet: 
+            - Ref: "BastionHostSG"
+          SubnetId: 
+            Ref: "PublicSubnetOne"
